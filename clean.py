@@ -1,16 +1,16 @@
 """Clean and concise implementation of this neural network. Performs K-folds cross-validation
     may be used for parameter tuning"""
-
 import pandas as pd
 import numpy as np
-from network import Mercedez, train_model
+import tensorflow as tf
+from network import Mercedez, validate_train, infer_train
 from utils import preprocess, CrossValidationFolds
 
 # Constants
 PATH = './data/'
 TRAIN = 'train.csv'
 TEST = 'test.csv'
-SUBMIT = False
+SUBMIT = True
 
 # Hyper Parameters
 MAX_ITER = 400
@@ -39,13 +39,15 @@ def k_folds(model, num_folds, train_features, targets):
     mse_log = []
     data = CrossValidationFolds(train_features, targets, num_folds)
 
+    sess = tf.Session()
+
     for i in range(num_folds):
         print('Current fold: {}\n'.format(data.current_fold + 1))
         (train_input, train_target), (cv_input, cv_target) = data.split()
 
         # Start Training
-        cv_loss, cv_r2 = train_model(data.current_fold, MAX_ITER, DROPOUT,
-                                     model, train_input, train_target, cv_input, cv_target)
+        cv_loss, cv_r2 = validate_train(sess, data.current_fold, MAX_ITER, DROPOUT,
+                                        model, train_input, train_target, cv_input, cv_target)
 
         mse_log.append(cv_loss)
         r_squared_log.append(cv_r2)
@@ -61,14 +63,18 @@ def main():
     train_df, test_df, num_examples = read_data(PATH, TRAIN, TEST)
 
     # Preprocessing
-    (train_data, target), (_, _) = preprocess(train_df, test_df, FEATURE_DROP)
+    (train_data, target), (test_data, ID) = preprocess(train_df, test_df, FEATURE_DROP)
 
     # Define model & build graph
     model = Mercedez(batch_size=num_examples, layers=LAYERS, learning_rate=LEARNING_RATE)
     model.build_graph()
 
-    # Run K-Folds Validation
-    k_folds(model, FOLDS, train_data, target)
+    if SUBMIT:
+        infer_train(MAX_ITER, DROPOUT, model, train_data, target, test_data, ID)
+
+    else:
+        # Run K-Folds Validation
+        k_folds(model, FOLDS, train_data, target)
 
 if __name__ == '__main__':
     main()

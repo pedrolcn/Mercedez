@@ -1,7 +1,7 @@
 """Auxiliary functions for building, training and inference of a neural network"""
 import tensorflow as tf
 import numpy as np
-from utils import weight_variable, bias_variable, build_feed  # r2
+from utils import weight_variable, bias_variable, build_feed, submit  # r2
 
 
 class Network(object):
@@ -110,10 +110,10 @@ class Mercedez(Network):
         return mse, r_squared
 
 
-def train_model(fold, max_iter, dropout_rate, model, train_input, train_target, cv_input, cv_target):
+def validate_train(session, fold, max_iter, dropout_rate, model, train_input, train_target, cv_input, cv_target):
     saver = tf.train.Saver()
 
-    with tf.Session() as sess:
+    with session.as_default() as sess:
         sess.run(tf.global_variables_initializer())
         print('Starting Training...')
 
@@ -142,3 +142,34 @@ def train_model(fold, max_iter, dropout_rate, model, train_input, train_target, 
         print('                 Validation Loss: {0: .2f} | R_squared: {1: .5f}\n'.format(cv_mse, cv_r2))
 
         return cv_mse, cv_r2
+
+
+def infer_train(max_iter, dropout_rate, model, train_input, train_target, test_input, id_column):
+    saver = tf.train.Saver()
+
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        print('Starting Training...')
+
+        # Batch training: building the feed_dicts does not have to be done inside the training loop
+        train_feed = build_feed(model, train_input, train_target, dropout_rate)
+        train_eval_feed = build_feed(model, train_input, train_target, 1.0)
+
+        for i in range(max_iter):
+            # Logging loss to prompt every so often
+            if i % 100 == 0:
+                train_loss = model.loss.eval(feed_dict=train_eval_feed)
+                print('Step {0}, Train Loss: {1: .2f}'.format(i, train_loss))
+
+            # Train Step
+            model.train_op.run(feed_dict=train_feed)
+
+        # Short training time, thus checkpoint is done by the end of training and not every N steps
+        saver.save(sess, './checkpoints/fold')
+
+        # Log final model training and CV metrics
+        (train_mse, train_r2) = model.metrics(train_eval_feed, train_target)
+        print('\nTraining Finished, Training Loss: {0: .2f} | R_squared: {1: .5f}'.format(train_mse, train_r2))
+
+        inference = model.y_fc.eval(feed_dict={model.x: test_input, model.keep_prob: 1.0})
+        submit(id_column, inference)

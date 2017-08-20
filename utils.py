@@ -131,3 +131,10 @@ def preprocess(train_dataframe, test_dataframe, drop_features):
     test_input = np.concatenate((categoricals_test, test_dataframe[binaries].values.astype('float32')), axis=1)
 
     return (train_data, target), (test_input, test_id)
+
+
+def submit(id_column, predictions):
+
+    submission = pd.DataFrame({'ID': id_column.reshape(id_column.shape[0]),
+                               'y': predictions.reshape(predictions.shape[0])})
+    submission.to_csv("NN.csv", index=False, header=True)
